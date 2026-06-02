@@ -46,19 +46,34 @@ document.querySelectorAll("#tierBtns .tier").forEach(b =>
   b.onclick = () => setTier(+b.dataset.level));
 setTier(3);
 
-// ── โหลด ensemble (pose + bbox) อัตโนมัติเมื่อ OpenCV.js พร้อม ──
-async function loadModel() {
-  setStatus("กำลังโหลดโมเดล ensemble…", "warn");
-  try {
-    grader = await P.EnsembleGrader.load((done, total, name) =>
-      setStatus(`กำลังโหลดโมเดล ${done}/${total} (${name})…`, "warn"));
-    setStatus(`พร้อมใช้งาน · ${level} คู่ (โหวต ≥${tierQuorum(level)}/${level})`);
-    if (selKeyFile) $("keyProcessBtn").disabled = false;
-    if (selGradeFile || selBatchFiles) $("gradeProcessBtn").disabled = false;
-  } catch (e) { setStatus("โหลดโมเดลไม่สำเร็จ: " + e, "bad"); console.error(e); }
+// ── โหลด ensemble (pose + bbox) แบบ lazy: โหลดครั้งแรกตอนกดประมวลผล/ตรวจ ──
+let modelPromise = null;
+async function ensureModel() {
+  if (grader) return grader;
+  if (!modelPromise) {
+    modelPromise = (async () => {
+      setStatus("กำลังโหลดโมเดล ensemble…", "warn");
+      try {
+        grader = await P.EnsembleGrader.load((done, total, name) =>
+          setStatus(`กำลังโหลดโมเดล ${done}/${total} (${name})…`, "warn"));
+        setStatus(`พร้อมใช้งาน · ${level} คู่ (โหวต ≥${tierQuorum(level)}/${level})`);
+        return grader;
+      } catch (e) {
+        modelPromise = null;   // ให้ลองใหม่ได้
+        setStatus("โหลดโมเดลไม่สำเร็จ: " + e, "bad"); console.error(e);
+        return null;
+      }
+    })();
+  }
+  return modelPromise;
 }
 window.__cvReady = () => {
-  cv.onRuntimeInitialized = () => { cvReady = true; loadModel(); };
+  cv.onRuntimeInitialized = () => {
+    cvReady = true;
+    setStatus("พร้อม — เลือกไฟล์แล้วกด 'ประมวลผลเฉลย' (โหลดโมเดลครั้งแรกอัตโนมัติ)");
+    if (selKeyFile) $("keyProcessBtn").disabled = false;
+    if (selGradeFile || selBatchFiles) $("gradeProcessBtn").disabled = false;
+  };
 };
 
 // ── ตัวช่วยแปลงภาพ ──
@@ -82,6 +97,22 @@ function imgElToBGR(imgEl) {
   return bgr;
 }
 async function fileToBGR(file) { return imgElToBGR(await fileToImage(file)); }
+// center-crop ภาพจากกล้องให้เป็นสัดส่วน 4:3 (กว้าง:สูง) ก่อนส่งเข้าตรวจ
+function imgElToBGR43(el) {
+  const w = el.naturalWidth || el.videoWidth || el.width;
+  const h = el.naturalHeight || el.videoHeight || el.height;
+  let cw = w, ch = Math.round(w * 3 / 4);
+  if (ch > h) { ch = h; cw = Math.round(h * 4 / 3); }
+  const sx = Math.floor((w - cw) / 2), sy = Math.floor((h - ch) / 2);
+  const c = document.createElement("canvas");
+  c.width = cw; c.height = ch;
+  c.getContext("2d").drawImage(el, sx, sy, cw, ch, 0, 0, cw, ch);
+  const rgba = cv.imread(c);
+  const bgr = new cv.Mat();
+  cv.cvtColor(rgba, bgr, cv.COLOR_RGBA2BGR);
+  rgba.delete();
+  return bgr;
+}
 function showBGR(canvasId, bgrMat) {
   const rgba = new cv.Mat();
   cv.cvtColor(bgrMat, rgba, cv.COLOR_BGR2RGBA);
@@ -178,7 +209,7 @@ async function camErrorMsg(e) {
 let camFacing = "environment";
 // ขอกล้องตามทิศที่ระบุ บังคับ exact ก่อน ถ้าเครื่องไม่มีค่อย fallback
 async function getCamStream(facing = camFacing) {
-  const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  const size = { width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } };
   try {
     return await navigator.mediaDevices.getUserMedia({ video: { ...size, facingMode: { exact: facing } } });
   } catch (e) {
@@ -214,13 +245,7 @@ function closeCamera(result) {
   if (camResolve) { camResolve(result); camResolve = null; }
 }
 $("camShot").onclick = () => {
-  const v = $("cam");
-  const c = document.createElement("canvas");
-  c.width = v.videoWidth; c.height = v.videoHeight;
-  c.getContext("2d").drawImage(v, 0, 0);
-  const rgba = cv.imread(c); const bgr = new cv.Mat();
-  cv.cvtColor(rgba, bgr, cv.COLOR_RGBA2BGR); rgba.delete();
-  closeCamera(bgr);
+  closeCamera(imgElToBGR43($("cam")));   // จับภาพแบบ crop 4:3
 };
 $("camCancel").onclick = () => closeCamera(null);
 $("camFlip").onclick = async () => {
@@ -240,7 +265,7 @@ $("camModal").onclick = e => { if (e.target === $("camModal")) closeCamera(null)
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("camModal").style.display === "flex") closeCamera(null); });
 
 function requireReady(noteId) {
-  if (!grader) { if (noteId) setNote(noteId, "กำลังโหลดโมเดล… รอสักครู่แล้วลองใหม่", "warn"); return false; }
+  if (!cvReady) { if (noteId) setNote(noteId, "กำลังเตรียมระบบ… รอสักครู่แล้วลองใหม่", "warn"); return false; }
   return true;
 }
 
@@ -269,15 +294,17 @@ $("keyFile").onchange = e => {
   selKeyFile = e.target.files[0];
   $("keyFileInfo").textContent = "เลือกไฟล์: " + selKeyFile.name;
   setNote("keyStatus", "กดปุ่ม 'ประมวลผลเฉลย' เพื่อหาคำตอบ", "warn");
-  $("keyProcessBtn").disabled = !grader;
+  $("keyProcessBtn").disabled = !cvReady;
   e.target.value = "";
 };
 $("keyProcessBtn").onclick = async () => {
   if (!requireReady("keyStatus") || !selKeyFile) return;
+  if (!(await ensureModel())) return;
   await withBusy("keyProcessBtn", async () => processKey(await fileToBGR(selKeyFile)));
 };
 $("keyCamBtn").onclick = async () => {
   if (!requireReady("keyStatus")) return;
+  if (!(await ensureModel())) return;
   const bgr = await openCamera();
   if (bgr) await withBusy(null, () => processKey(bgr));
 };
@@ -326,7 +353,7 @@ $("gradeFile").onchange = e => {
   selGradeFile = e.target.files[0]; selBatchFiles = null; gradeMode = "single";
   $("gradeFileInfo").textContent = "เลือกไฟล์ (เดี่ยว): " + selGradeFile.name;
   setNote("gradeStatus", "กดปุ่ม 'ตรวจคำตอบ' เพื่อตรวจ", "warn");
-  $("gradeProcessBtn").disabled = !grader;
+  $("gradeProcessBtn").disabled = !cvReady;
   e.target.value = "";
 };
 $("batchFiles").onchange = e => {
@@ -336,12 +363,13 @@ $("batchFiles").onchange = e => {
   selBatchFiles = files; selGradeFile = null; gradeMode = "batch";
   $("gradeFileInfo").textContent = `เลือกหลายไฟล์ (ชุด): ${files.length} ไฟล์`;
   setNote("gradeStatus", "กดปุ่ม 'ตรวจคำตอบ' เพื่อตรวจทั้งชุด", "warn");
-  $("gradeProcessBtn").disabled = !grader;
+  $("gradeProcessBtn").disabled = !cvReady;
   e.target.value = "";
 };
 $("gradeProcessBtn").onclick = async () => {
   if (!requireReady("gradeStatus") || !requireKey("gradeStatus")) return;
   stopRealtime();
+  if (!(await ensureModel())) return;
   await withBusy("gradeProcessBtn", async () => {
     if (gradeMode === "batch" && selBatchFiles) { showBatch(); await gradeBatch(selBatchFiles); }
     else if (selGradeFile) { showSingle(); await gradeSingle(await fileToBGR(selGradeFile)); }
@@ -350,6 +378,7 @@ $("gradeProcessBtn").onclick = async () => {
 $("gradeCamBtn").onclick = async () => {
   if (!requireReady("gradeStatus") || !requireKey("gradeStatus")) return;
   stopRealtime(); showSingle();
+  if (!(await ensureModel())) return;
   const bgr = await openCamera();
   if (bgr) await withBusy(null, () => gradeSingle(bgr));
 };
@@ -420,6 +449,7 @@ attachTapFocus($("rtCam"), () => rtStream);
 
 $("realtimeBtn").onclick = async () => {
   if (!requireReady("gradeStatus") || !requireKey("gradeStatus")) return;
+  if (!(await ensureModel())) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     setNote("gradeStatus", "เบราว์เซอร์นี้ใช้กล้องไม่ได้ — ต้องเปิดผ่าน https หรือ localhost", "bad"); return;
   }
@@ -443,7 +473,7 @@ async function rtLoop() {
     if (cam.videoWidth) {
       let bgr;
       try {
-        bgr = imgElToBGR(cam);
+        bgr = imgElToBGR43(cam);   // crop 4:3
         const { results, colsMeta } = await grader.grade(bgr, rtLevel, null, P.RT_PAIRS);
         if (results.length && colsMeta.length === EXPECTED_COLS) {
           const { correct, graded } = P.scoreResults(results, key);
