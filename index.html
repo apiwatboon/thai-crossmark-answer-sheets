@@ -148,15 +148,8 @@
     </div>
     <div id="realtimeView" style="display:none">
       <div class="bar" style="padding:0 0 10px;border:none;background:none">
-        <label>โมเดล:</label>
-        <span id="rtTierBtns">
-          <button class="tier" data-rt="1" title="เร็วสุด" style="color:var(--bad)">1 คู่</button>
-          <button class="tier" data-rt="2" title="เร็ว" style="color:var(--warn)">2 คู่</button>
-          <button class="tier" data-rt="3" title="สมดุล" style="color:var(--warn)">3 คู่</button>
-          <button class="tier" data-rt="4" title="แม่นขึ้น (ช้าลง)" style="color:var(--ok)">4 คู่</button>
-        </span>
         <button id="rtFlipBtn" title="สลับกล้องหน้า/หลัง">⟲ สลับกล้อง</button>
-      <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
+        <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
       </div>
       <div class="score" id="rtScore">—</div>
       <video id="rtCam" autoplay playsinline muted style="max-width:100%;max-height:42vh;border:1px solid var(--line);border-radius:8px;background:#000;display:block"></video>

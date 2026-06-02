@@ -354,14 +354,8 @@ $("gradeCamBtn").onclick = async () => {
   if (bgr) await withBusy(null, () => gradeSingle(bgr));
 };
 
-// ── โหมดเรียลไทม์ (กล้องสด) ──
+// ── โหมดเรียลไทม์ (กล้องสด) — ใช้ 1 คู่เสมอ ──
 let rtActive = false, rtStream = null, rtLevel = 1;
-document.querySelectorAll("#rtTierBtns .tier").forEach(b =>
-  b.onclick = () => {
-    rtLevel = +b.dataset.rt;   // เปลี่ยนทันที เฟรมถัดไปใช้ค่าใหม่
-    document.querySelectorAll("#rtTierBtns .tier").forEach(x => x.classList.toggle("active", x === b));
-  });
-document.querySelector('#rtTierBtns .tier[data-rt="1"]').classList.add("active");
 function stopRealtime() {
   rtActive = false;
   if (rtStream) { rtStream.getTracks().forEach(t => t.stop()); rtStream = null; }
