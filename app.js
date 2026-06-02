@@ -174,6 +174,18 @@ async function camErrorMsg(e) {
       return "เปิดกล้องไม่ได้: " + ((e && e.message) || e);
   }
 }
+// ขอกล้องหลัง (environment) แบบบังคับก่อน ถ้าเครื่องไม่มีกล้องหลังค่อย fallback เป็นกล้องใดก็ได้
+async function getRearStream() {
+  const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: { ...size, facingMode: { exact: "environment" } } });
+  } catch (e) {
+    if (e && (e.name === "OverconstrainedError" || e.name === "NotFoundError" || e.name === "ConstraintNotSatisfiedError")) {
+      return await navigator.mediaDevices.getUserMedia({ video: { ...size, facingMode: "environment" } });
+    }
+    throw e;
+  }
+}
 function openCamera() {
   return new Promise(async (resolve) => {
     camResolve = resolve;
@@ -187,7 +199,7 @@ function openCamera() {
     }
     setStatus("กำลังขอสิทธิ์ใช้กล้อง… โปรดกด 'อนุญาต' ในเบราว์เซอร์", "warn");
     try {
-      camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+      camStream = await getRearStream();
       $("cam").srcObject = camStream;
       $("camModal").style.display = "flex";
       setStatus("พร้อมใช้งาน");
@@ -352,7 +364,7 @@ $("realtimeBtn").onclick = async () => {
   }
   setNote("gradeStatus", "กำลังขอสิทธิ์ใช้กล้อง… โปรดกด 'อนุญาต'", "warn");
   try {
-    rtStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "environment" } });
+    rtStream = await getRearStream();
   } catch (e) { setNote("gradeStatus", await camErrorMsg(e), "bad"); return; }
   $("rtCam").srcObject = rtStream;
   showRealtime();
