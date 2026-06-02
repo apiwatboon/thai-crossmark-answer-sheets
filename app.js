@@ -225,10 +225,15 @@ $("camShot").onclick = () => {
 $("camCancel").onclick = () => closeCamera(null);
 $("camFlip").onclick = async () => {
   const next = camFacing === "environment" ? "user" : "environment";
+  // มือถือเปิดกล้องได้ทีละตัว — ต้องปิดตัวเดิมก่อนค่อยขอทิศใหม่
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; $("cam").srcObject = null; }
   let s;
   try { s = await getCamStream(next); }
-  catch (e) { setStatus(await camErrorMsg(e), "bad"); return; }
-  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  catch (e) {
+    setStatus(await camErrorMsg(e), "bad");
+    try { camStream = await getCamStream(camFacing); $("cam").srcObject = camStream; } catch (_) {}
+    return;
+  }
   camFacing = next; camStream = s; $("cam").srcObject = s;
 };
 $("camModal").onclick = e => { if (e.target === $("camModal")) closeCamera(null); };
@@ -366,10 +371,15 @@ $("rtStopBtn").onclick = () => { stopRealtime(); showSingle(); setNote("gradeSta
 $("rtFlipBtn").onclick = async () => {
   if (!rtStream) return;
   const next = camFacing === "environment" ? "user" : "environment";
+  // ปิดกล้องเดิมก่อน (มือถือเปิดได้ทีละตัว) แล้วค่อยขอทิศใหม่
+  rtStream.getTracks().forEach(t => t.stop()); rtStream = null; $("rtCam").srcObject = null;
   let s;
   try { s = await getCamStream(next); }
-  catch (e) { setNote("gradeStatus", await camErrorMsg(e), "bad"); return; }
-  rtStream.getTracks().forEach(t => t.stop());
+  catch (e) {
+    setNote("gradeStatus", await camErrorMsg(e), "bad");
+    try { rtStream = await getCamStream(camFacing); $("rtCam").srcObject = rtStream; } catch (_) {}
+    return;
+  }
   camFacing = next; rtStream = s; $("rtCam").srcObject = s;
 };
 
