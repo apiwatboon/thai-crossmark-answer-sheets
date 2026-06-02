@@ -47,6 +47,14 @@ const PAIRS = [
   { pose: "yolov8s_pose", reader: "yolov8s_bbox", acc: 0.8450 },
   { pose: "yolo11s_pose", reader: "yolov8s_bbox", acc: 0.8280 },
 ];
+// คู่สำหรับโหมดเรียลไทม์ — ใช้ yolo26n_pose ล้วน (เบา/เร็ว รัน pose ครั้งเดียว)
+//   1 คู่ = 26n_pose + 26n_bbox ; คู่ 2/3/4 เพิ่มตามคะแนน q_acc มาก→น้อย
+const RT_PAIRS = [
+  { pose: "yolo26n_pose", reader: "yolo26n_bbox", acc: 0.8504 },
+  { pose: "yolo26n_pose", reader: "pixel_count", acc: 0.8518 },
+  { pose: "yolo26n_pose", reader: "yolo11s_bbox", acc: 0.8509 },
+  { pose: "yolo26n_pose", reader: "yolov8s_bbox", acc: 0.8470 },
+];
 // ระดับการโหวต = จำนวนคู่ที่ดีที่สุด N คู่ ; quorum = เสียงข้างมาก ⌊N/2⌋+1
 const TIERS = { 1: 1, 3: 3, 6: 6, 9: 9, 12: 12 };
 function tierQuorum(level) { const n = TIERS[level] || 12; return (n >> 1) + 1; }
@@ -643,9 +651,9 @@ class EnsembleGrader {
     return { maps, qcount: qno, colsMeta };
   }
 
-  async grade(srcMat, level = 12, signal = null) {
-    const nPairs = Math.min(Math.max(TIERS[level] || level || 12, 1), PAIRS.length);
-    const selected = PAIRS.slice(0, nPairs);
+  async grade(srcMat, level = 12, signal = null, pairsList = PAIRS) {
+    const nPairs = Math.min(Math.max(TIERS[level] || level || 12, 1), pairsList.length);
+    const selected = pairsList.slice(0, nPairs);
     const quorum = (nPairs >> 1) + 1;             // เสียงข้างมาก
     const primaryPose = selected[0].pose;          // pose ของคู่ที่ดีที่สุด = ภาพ viz
     // จัดกลุ่มตาม pose เพื่อรัน pose+crop ครั้งเดียวต่อ pose
@@ -845,7 +853,7 @@ function annotate(colsMeta, key = null, colFirstQ = null) {
 }
 
 window.WebPipeline = {
-  CFG, CLASS_LABEL, ENSEMBLE, TIERS, PAIRS, tierQuorum, WebGrader, EnsembleGrader,
+  CFG, CLASS_LABEL, ENSEMBLE, TIERS, PAIRS, RT_PAIRS, tierQuorum, WebGrader, EnsembleGrader,
   classSignature, signatureText, compareSignatures, colFirstQuestion,
   resultsToKey, scoreResults, formatKeyByColumn, annotate,
 };

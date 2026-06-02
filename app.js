@@ -450,7 +450,7 @@ async function rtLoop() {
       let bgr;
       try {
         bgr = imgElToBGR(cam);
-        const { results, colsMeta } = await grader.grade(bgr, rtLevel);
+        const { results, colsMeta } = await grader.grade(bgr, rtLevel, null, P.RT_PAIRS);
         if (results.length && colsMeta.length === EXPECTED_COLS) {
           const { correct, graded } = P.scoreResults(results, key);
           const [match] = P.compareSignatures(keySig, P.classSignature(colsMeta));
