@@ -155,7 +155,8 @@
           <button class="tier" data-rt="3" title="สมดุล" style="color:var(--warn)">3 คู่</button>
           <button class="tier" data-rt="4" title="แม่นขึ้น (ช้าลง)" style="color:var(--ok)">4 คู่</button>
         </span>
-        <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
+        <button id="rtFlipBtn" title="สลับกล้องหน้า/หลัง">⟲ สลับกล้อง</button>
+      <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
       </div>
       <div class="score" id="rtScore">—</div>
       <video id="rtCam" autoplay playsinline muted style="max-width:100%;max-height:42vh;border:1px solid var(--line);border-radius:8px;background:#000;display:block"></video>
@@ -192,6 +193,7 @@
     <video id="cam" autoplay playsinline style="max-width:100%;max-height:68vh;object-fit:contain"></video>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <button id="camShot" class="primary">จับภาพ</button>
+      <button id="camFlip" title="สลับกล้องหน้า/หลัง">⟲ สลับกล้อง</button>
       <button id="camCancel">ยกเลิก</button>
     </div>
   </div>
