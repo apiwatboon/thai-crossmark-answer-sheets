@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบตรวจกระดาษคำตอบ (เว็บ) — YOLO Grid-Crop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --panel2: #1f242d; --line: #2a313c;
+    --fg: #e6e9ef; --muted: #8b94a3; --accent: #3b82f6; --accent-d: #2563eb;
+    --ok: #34d399; --bad: #f87171; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Noto Sans Thai", "Segoe UI", Tahoma, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
+  header { background: linear-gradient(90deg, #111827, #1e3a8a); color: #fff; padding: 14px 18px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; text-align: center; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar label { font-size: 14px; color: var(--muted); }
+  select, button { font-family: "Noto Sans Thai", "Segoe UI", Tahoma, sans-serif; font-size: 14px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--fg); cursor: pointer; transition: .15s; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+  button.primary:hover:not(:disabled) { background: var(--accent-d); }
+  button.tier.active { background: var(--accent); color: #fff !important; border-color: var(--accent); }
+  button svg { vertical-align: -3px; margin-right: 6px; }
+  button:disabled { opacity: .4; cursor: default; }
+  #status { font-size: 13px; color: var(--ok); margin-left: auto; }
+  /* สปินเนอร์หมุน — บอกว่ากำลังประมวลผล */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-left: 6px; }
+  button.busy { position: relative; color: transparent !important; pointer-events: none; }
+  button.busy::after { content: ""; position: absolute; inset: 0; margin: auto; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  .split { display: flex; gap: 14px; align-items: stretch; padding: 14px 18px; }
+  .side { flex: 1 1 0; min-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }
+  .side > h2 { margin: 0 0 12px; font-size: 16px; border-bottom: 2px solid var(--accent); padding-bottom: 8px; font-weight: 600; }
+  @media (max-width: 900px) { .split { flex-direction: column; } .side { min-width: 0; } }
+  canvas.view { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0a0d12; }
+  pre { font-family: "Noto Sans Thai", "Segoe UI", Tahoma, sans-serif; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; max-height: 460px; overflow: auto; color: var(--fg); }
+  .score { font-size: 28px; font-weight: 700; margin: 6px 0; }
+  .chk { font-size: 14px; margin: 4px 0 10px; white-space: pre-wrap; line-height: 1.5; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .notice { font-size: 13px; min-height: 18px; }
+  /* ป้ายแจ้งใกล้ปุ่ม */
+  .flags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .flag { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); }
+  .flag.unc { background: rgba(251,191,36,.12); color: var(--warn); border-color: var(--warn); }
+  .flag.multi { background: rgba(236,72,153,.12); color: #f472b6; border-color: #f472b6; }
+  .flag.empty { background: rgba(139,148,163,.12); color: var(--muted); }
+  .flag.good { background: rgba(52,211,153,.12); color: var(--ok); border-color: var(--ok); }
+  /* batch grid */
+  #batchGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 6px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; opacity: 0; transform: translateY(12px); animation: pop .4s ease forwards; }
+  @keyframes pop { to { opacity: 1; transform: translateY(0); } }
+  .card .fname { font-size: 12px; color: var(--muted); word-break: break-all; margin-bottom: 8px; }
+  .card .pct { font-size: 26px; font-weight: 700; }
+  .card .det { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .card .ring { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .card .ring > i { display: block; height: 100%; width: 0; border-radius: 999px; animation: fill .6s ease forwards; }
+  @keyframes fill { to { width: var(--w, 0%); } }
+  .card.err { border-color: var(--bad); }
+  .card.err .pct { font-size: 15px; color: var(--bad); }
+  .card { cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card .nm { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 3px; word-break: break-all; }
+  /* modal ผลรายใบ */
+  #resultModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 10; align-items: center; justify-content: center; padding: 20px; }
+  .modalBox { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-width: 780px; width: 100%; max-height: 90vh; overflow: auto; padding: 18px; position: relative; }
+  .modalBox .nameRow { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+  .modalBox .nameRow label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; }
+  .modalBox input[type=text] { font-family: "Noto Sans Thai", "Segoe UI", Tahoma, sans-serif; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--fg); }
+  .modalBox input[type=text]:focus { outline: none; border-color: var(--accent); }
+  #resultClose { position: absolute; top: 10px; right: 10px; }
+  #rmImg { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0a0d12; }
+  video { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .fileinfo { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>ระบบตรวจกระดาษคำตอบปรนัย แบบกากบาท แบบออนไลน์</h1></header>
+
+<div class="bar">
+  <label>ระดับการโหวต:</label>
+  <span id="tierBtns">
+    <button class="tier" data-level="12" title="แม่นยำสุด แต่ช้า" style="color:var(--ok)">12 คู่</button>
+    <button class="tier" data-level="9" title="แม่นยำสูง" style="color:var(--ok)">9 คู่</button>
+    <button class="tier" data-level="6" title="สมดุล" style="color:var(--warn)">6 คู่</button>
+    <button class="tier" data-level="3" title="เร็ว สมดุล (ค่าเริ่มต้น)" style="color:var(--warn)">3 คู่</button>
+    <button class="tier" data-level="1" title="เร็วสุด แต่อาจผิดพลาด" style="color:var(--bad)">1 คู่</button>
+  </span>
+  <span id="tierInfo" class="muted"></span>
+  <span id="status">กำลังโหลดไลบรารี…</span>
+  <span id="spin" class="spinner" style="display:none"></span>
+  <button id="stopBtn" style="display:none;border-color:var(--bad);color:var(--bad)">■ หยุด</button>
+</div>
+
+<div style="padding:10px 18px;color:var(--muted);font-size:13px;background:var(--panel);border-bottom:1px solid var(--line)">
+  <b style="color:var(--fg)">เงื่อนไขการใช้งาน:</b> ใช้ตรวจกระดาษคำตอบปรนัยแบบกากบาท (✗) ชนิด 4 คอลัมน์ จำนวน 60, 80, 100 และ 120 ข้อ เท่านั้น
+</div>
+
+<div class="split">
+  <!-- ด้านซ้าย: เฉลย -->
+  <section class="side">
+    <h2>เฉลย</h2>
+    <div class="bar" style="padding:0 0 10px;border:none;background:none">
+      <input type="file" id="keyFile" accept="image/*" hidden>
+      <button onclick="document.getElementById('keyFile').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>เลือกไฟล์เฉลย</button>
+      <button id="keyCamBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายจากกล้อง</button>
+      <div style="flex-basis:100%;height:0"></div>
+      <button id="keyProcessBtn" class="primary" disabled>ประมวลผลเฉลย</button>
+    </div>
+    <div class="fileinfo" id="keyFileInfo">ยังไม่ได้เลือกไฟล์</div>
+    <div class="notice" id="keyStatus" style="margin:6px 0;">ยังไม่มีเฉลย</div>
+    <div class="flags" id="keyFlags"></div>
+    <canvas id="keyCanvas" class="view"></canvas>
+    <b style="margin-top:10px">คำตอบเฉลย (แยกตามคอลัมน์/คลาส):</b>
+    <pre id="keyText">—</pre>
+  </section>
+
+  <!-- ด้านขวา: ตรวจคำตอบ -->
+  <section class="side">
+    <h2>ตรวจคำตอบ</h2>
+    <div class="bar" style="padding:0 0 10px;border:none;background:none">
+      <input type="file" id="gradeFile" accept="image/*" hidden>
+      <input type="file" id="batchFiles" accept="image/*" multiple hidden>
+      <button onclick="document.getElementById('gradeFile').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>เลือกไฟล์ (เดี่ยว)</button>
+      <button id="gradeCamBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายจากกล้อง</button>
+      <button onclick="document.getElementById('batchFiles').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>เลือกหลายไฟล์ (ชุด)</button>
+      <button id="realtimeBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>เรียลไทม์ (กล้องสด)</button>
+      <div style="flex-basis:100%;height:0"></div>
+      <button id="gradeProcessBtn" class="primary" disabled>ตรวจคำตอบ</button>
+      <button id="exportBtn">ส่งออกผลรวม CSV</button>
+    </div>
+    <div class="fileinfo" id="gradeFileInfo">ยังไม่ได้เลือกไฟล์</div>
+    <div class="notice" id="gradeStatus" style="margin:6px 0;"></div>
+    <div id="singleView">
+      <div class="score" id="scoreLbl">—</div>
+      <div class="flags" id="gradeFlags"></div>
+      <div class="chk" id="chkLbl"></div>
+      <canvas id="gradeCanvas" class="view"></canvas>
+      <b style="margin-top:10px">ข้อที่ตอบผิด (ข้อ: ตอบ → เฉลย):</b>
+      <pre id="wrongText">—</pre>
+    </div>
+    <div id="batchView" style="display:none">
+      <div id="batchGrid"></div>
+    </div>
+    <div id="realtimeView" style="display:none">
+      <div class="bar" style="padding:0 0 10px;border:none;background:none">
+        <label>โมเดล:</label>
+        <span id="rtTierBtns">
+          <button class="tier" data-rt="1" title="เร็วสุด" style="color:var(--bad)">1 คู่</button>
+          <button class="tier" data-rt="2" title="เร็ว" style="color:var(--warn)">2 คู่</button>
+          <button class="tier" data-rt="3" title="สมดุล" style="color:var(--warn)">3 คู่</button>
+          <button class="tier" data-rt="4" title="แม่นขึ้น (ช้าลง)" style="color:var(--ok)">4 คู่</button>
+        </span>
+        <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
+      </div>
+      <div class="score" id="rtScore">—</div>
+      <video id="rtCam" autoplay playsinline muted style="max-width:100%;max-height:42vh;border:1px solid var(--line);border-radius:8px;background:#000;display:block"></video>
+      <canvas id="rtCanvas" class="view" style="margin-top:10px"></canvas>
+    </div>
+  </section>
+</div>
+
+<footer style="text-align:center;color:var(--muted);font-size:13px;padding:18px;border-top:1px solid var(--line);margin-top:8px">
+  สาขาวิชาวิศวกรรมคอมพิวเตอร์ คณะวิศวกรรมศาสตร์ มหาวิทยาลัยนครพนม
+</footer>
+
+<!-- ผลรายใบ (ชุด) -->
+<div id="resultModal">
+  <div class="modalBox">
+    <button id="resultClose">✕ ปิด</button>
+    <div class="fileinfo" id="rmFile"></div>
+    <div class="nameRow">
+      <label>ชื่อจริง<input type="text" id="rmReal" placeholder="ชื่อ-สกุล"></label>
+      <label>ชื่อเล่น<input type="text" id="rmNick" placeholder="ชื่อเล่น"></label>
+    </div>
+    <div class="score" id="rmScore">—</div>
+    <div class="flags" id="rmFlags"></div>
+    <div class="chk" id="rmChk"></div>
+    <img id="rmImg" alt="ผลตรวจ">
+    <b style="display:block;margin-top:10px">ข้อที่ตอบผิด (ข้อ: ตอบ → เฉลย):</b>
+    <pre id="rmWrong">—</pre>
+  </div>
+</div>
+
+<!-- กล้อง -->
+<div id="camModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9;align-items:center;justify-content:center;padding:16px;overflow:auto">
+  <div style="background:var(--panel);padding:16px;border-radius:12px;text-align:center;border:1px solid var(--line);max-width:100%;max-height:92vh;display:flex;flex-direction:column;gap:10px">
+    <video id="cam" autoplay playsinline style="max-width:100%;max-height:68vh;object-fit:contain"></video>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button id="camShot" class="primary">จับภาพ</button>
+      <button id="camCancel">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+<script src="pipeline.js"></script>
+<script src="app.js"></script>
+<script async src="https://docs.opencv.org/4.x/opencv.js" onload="window.__cvReady && window.__cvReady()"></script>
+</body>
+</html>

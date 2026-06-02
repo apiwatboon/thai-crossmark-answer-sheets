@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer";
+const b = await puppeteer.launch({ headless: "new", args: ["--no-sandbox"] });
+const p = await b.newPage();
+await p.setViewport({ width: 1280, height: 760 });
+await p.goto("http://127.0.0.1:8000/index.html", { waitUntil: "load", timeout: 60000 });
+await p.waitForFunction(() => typeof cv !== "undefined" && cv.Mat, { timeout: 120000, polling: 500 });
+await new Promise(r => setTimeout(r, 400));
+await p.screenshot({ path: "layout.png" });
+await b.close();
+console.log("saved layout.png");

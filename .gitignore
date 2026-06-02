@@ -1,0 +1,17 @@
+# dependencies (puppeteer — ใช้เทสเท่านั้น)
+node_modules/
+
+# โมเดลที่ไม่ได้ใช้ใน ensemble (pipeline.js โหลดแค่ 6 ไฟล์)
+models/yolo11n_pose.onnx
+models/yolo26s_pose.onnx
+models/yolov8n_pose.onnx
+
+# รูปทดสอบ / fixtures (ไม่จำเป็นต่อการรันแอป)
+t_100-*.jpg
+test_sheet.jpg
+jstest_data.json
+py_ref.json
+
+# misc
+.DS_Store
+Thumbs.db
