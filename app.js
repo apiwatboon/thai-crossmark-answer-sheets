@@ -383,6 +383,47 @@ $("rtFlipBtn").onclick = async () => {
   camFacing = next; rtStream = s; $("rtCam").srcObject = s;
 };
 
+// ── แตะหน้าจอเพื่อโฟกัสกล้อง (รองรับเฉพาะเครื่อง/เบราว์เซอร์ที่มี focusMode + pointsOfInterest) ──
+async function focusAt(stream, nx, ny) {
+  if (!stream) return false;
+  const track = stream.getVideoTracks()[0];
+  if (!track || !track.getCapabilities) return false;
+  const caps = track.getCapabilities();
+  const adv = {};
+  if (caps.pointsOfInterest) adv.pointsOfInterest = [{ x: nx, y: ny }];
+  if (caps.focusMode) {
+    if (caps.focusMode.includes("single-shot")) adv.focusMode = "single-shot";
+    else if (caps.focusMode.includes("manual")) adv.focusMode = "manual";
+    else if (caps.focusMode.includes("continuous")) adv.focusMode = "continuous";
+  }
+  if (!Object.keys(adv).length) return false;
+  try { await track.applyConstraints({ advanced: [adv] }); return true; }
+  catch { return false; }
+}
+function showFocusRing(x, y, ok) {
+  const r = document.createElement("div");
+  r.style.cssText = `position:fixed;left:${x - 32}px;top:${y - 32}px;width:64px;height:64px;` +
+    `border:2px solid ${ok ? "#ffd400" : "#888"};border-radius:10px;z-index:9999;pointer-events:none;` +
+    `box-shadow:0 0 0 1px rgba(0,0,0,.4);transition:transform .25s ease-out,opacity .5s;transform:scale(1.4);opacity:1`;
+  document.body.appendChild(r);
+  requestAnimationFrame(() => { r.style.transform = "scale(1)"; });
+  setTimeout(() => { r.style.opacity = "0"; }, 350);
+  setTimeout(() => r.remove(), 900);
+}
+function attachTapFocus(videoEl, getStream) {
+  videoEl.style.cursor = "crosshair";
+  videoEl.addEventListener("click", async e => {
+    const rect = videoEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    const ok = await focusAt(getStream(), nx, ny);
+    showFocusRing(e.clientX, e.clientY, ok);
+  });
+}
+attachTapFocus($("cam"), () => camStream);
+attachTapFocus($("rtCam"), () => rtStream);
+
 $("realtimeBtn").onclick = async () => {
   if (!requireReady("gradeStatus") || !requireKey("gradeStatus")) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
