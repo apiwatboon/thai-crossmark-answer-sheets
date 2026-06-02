@@ -35,8 +35,6 @@ function setTier(l) {
     ` · expand-crop · โหวต ≥${tierQuorum(l)}/${l}`;
 }
 
-ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-
 const $ = id => document.getElementById(id);
 function setStatus(msg, cls) { const s = $("status"); s.textContent = msg; s.style.color = noteColor(cls); }
 function noteColor(cls) { return cls === "bad" ? "var(--bad)" : cls === "warn" ? "var(--warn)" : "var(--ok)"; }
@@ -46,35 +44,58 @@ document.querySelectorAll("#tierBtns .tier").forEach(b =>
   b.onclick = () => setTier(+b.dataset.level));
 setTier(3);
 
-// ── โหลด ensemble (pose + bbox) แบบ lazy: โหลดครั้งแรกตอนกดประมวลผล/ตรวจ ──
+// ── โหลดไลบรารี (onnxruntime-web + OpenCV.js) แบบ lazy ครั้งแรกตอนใช้งาน ──
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.async = true;
+    s.onload = () => res();
+    s.onerror = () => rej(new Error("โหลดไลบรารีไม่สำเร็จ: " + src));
+    document.head.appendChild(s);
+  });
+}
+let libsPromise = null;
+async function loadLibs() {
+  if (cvReady) return;
+  if (!libsPromise) {
+    libsPromise = (async () => {
+      setStatus("กำลังโหลดไลบรารี…", "warn");
+      await loadScript("https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js");
+      ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+      await loadScript("https://docs.opencv.org/4.x/opencv.js");
+      await new Promise(res => {
+        if (window.cv && cv.Mat) return res();
+        cv.onRuntimeInitialized = () => res();
+      });
+      cvReady = true;
+    })();
+  }
+  return libsPromise;
+}
+
+// ── โหลด ensemble (pose + bbox) แบบ lazy: โหลดไลบรารี+โมเดลครั้งแรกตอนกดประมวลผล ──
 let modelPromise = null;
 async function ensureModel() {
   if (grader) return grader;
   if (!modelPromise) {
     modelPromise = (async () => {
-      setStatus("กำลังโหลดโมเดล ensemble…", "warn");
       try {
+        await loadLibs();
+        setStatus("กำลังโหลดโมเดล ensemble…", "warn");
         grader = await P.EnsembleGrader.load((done, total, name) =>
           setStatus(`กำลังโหลดโมเดล ${done}/${total} (${name})…`, "warn"));
         setStatus(`พร้อมใช้งาน · ${level} คู่ (โหวต ≥${tierQuorum(level)}/${level})`);
         return grader;
       } catch (e) {
         modelPromise = null;   // ให้ลองใหม่ได้
-        setStatus("โหลดโมเดลไม่สำเร็จ: " + e, "bad"); console.error(e);
+        setStatus("โหลดไม่สำเร็จ: " + e, "bad"); console.error(e);
         return null;
       }
     })();
   }
   return modelPromise;
 }
-window.__cvReady = () => {
-  cv.onRuntimeInitialized = () => {
-    cvReady = true;
-    setStatus("พร้อม — เลือกไฟล์แล้วกด 'ประมวลผลเฉลย' (โหลดโมเดลครั้งแรกอัตโนมัติ)");
-    if (selKeyFile) $("keyProcessBtn").disabled = false;
-    if (selGradeFile || selBatchFiles) $("gradeProcessBtn").disabled = false;
-  };
-};
+setStatus("พร้อม — เลือกไฟล์แล้วกด 'ประมวลผลเฉลย' (โหลดครั้งแรกอัตโนมัติ)");
 
 // ── ตัวช่วยแปลงภาพ ──
 function fileToImage(file) {
@@ -97,22 +118,36 @@ function imgElToBGR(imgEl) {
   return bgr;
 }
 async function fileToBGR(file) { return imgElToBGR(await fileToImage(file)); }
-// center-crop ภาพจากกล้องให้เป็นสัดส่วน 4:3 (กว้าง:สูง) ก่อนส่งเข้าตรวจ
-function imgElToBGR43(el) {
-  const w = el.naturalWidth || el.videoWidth || el.width;
-  const h = el.naturalHeight || el.videoHeight || el.height;
+// center-crop ภาพจากกล้องให้เป็นสัดส่วน 4:3 (กว้าง:สูง) + ดิจิทัลซูม → คืน canvas
+function cropCanvas43(el) {
+  let w = el.naturalWidth || el.videoWidth || el.width;
+  let h = el.naturalHeight || el.videoHeight || el.height;
+  let ox = 0, oy = 0;
+  if (digitalZoom && camZoom > 1) {     // ดิจิทัลซูม: ตัดบริเวณกลางเข้าไป
+    const zw = w / camZoom, zh = h / camZoom;
+    ox = (w - zw) / 2; oy = (h - zh) / 2; w = zw; h = zh;
+  }
   let cw = w, ch = Math.round(w * 3 / 4);
   if (ch > h) { ch = h; cw = Math.round(h * 4 / 3); }
-  const sx = Math.floor((w - cw) / 2), sy = Math.floor((h - ch) / 2);
+  const sx = Math.round(ox + (w - cw) / 2), sy = Math.round(oy + (h - ch) / 2);
+  cw = Math.round(cw); ch = Math.round(ch);
   const c = document.createElement("canvas");
   c.width = cw; c.height = ch;
   c.getContext("2d").drawImage(el, sx, sy, cw, ch, 0, 0, cw, ch);
+  return c;
+}
+function imgElToBGR43(el) {
+  const c = cropCanvas43(el);
   const rgba = cv.imread(c);
   const bgr = new cv.Mat();
   cv.cvtColor(rgba, bgr, cv.COLOR_RGBA2BGR);
   rgba.delete();
   return bgr;
 }
+function dataURLToImage(url) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+}
+async function dataURLToBGR(url) { return imgElToBGR(await dataURLToImage(url)); }
 function showBGR(canvasId, bgrMat) {
   const rgba = new cv.Mat();
   cv.cvtColor(bgrMat, rgba, cv.COLOR_BGR2RGBA);
@@ -207,6 +242,45 @@ async function camErrorMsg(e) {
 }
 // ทิศกล้องปัจจุบัน: "environment" = หลัง, "user" = หน้า
 let camFacing = "environment";
+// ── ซูมกล้อง: ฮาร์ดแวร์ก่อน (Android Chrome) ไม่งั้น digital crop ──
+let camZoom = 1, digitalZoom = false;
+const ZOOM_MAX = 4;
+function clampZoom(z, max) { return Math.min(max, Math.max(1, z)); }
+async function applyZoom(stream, videoEl, z) {
+  const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+  if (caps && caps.zoom) {                              // ฮาร์ดแวร์ซูม
+    const maxLogical = caps.zoom.min > 0 ? caps.zoom.max / caps.zoom.min : caps.zoom.max;
+    camZoom = clampZoom(z, Math.max(1.01, maxLogical));
+    digitalZoom = false;
+    const val = Math.min(caps.zoom.max, Math.max(caps.zoom.min, caps.zoom.min * camZoom));
+    try { await track.applyConstraints({ advanced: [{ zoom: val }] }); } catch (_) {}
+    if (videoEl) videoEl.style.transform = "";
+  } else {                                              // digital ซูม (crop + scale พรีวิว)
+    camZoom = clampZoom(z, ZOOM_MAX);
+    digitalZoom = camZoom > 1;
+    if (videoEl) { videoEl.style.transformOrigin = "center"; videoEl.style.transform = `scale(${camZoom})`; }
+  }
+}
+function resetZoom(videoEl) { camZoom = 1; digitalZoom = false; if (videoEl) videoEl.style.transform = ""; }
+function attachPinchZoom(videoEl, getStream) {
+  const pts = new Map();
+  let startDist = 0, startZoom = 1;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); };
+  videoEl.style.touchAction = "none";
+  videoEl.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, e);
+    if (pts.size === 2) { startDist = dist(); startZoom = camZoom; }
+  });
+  videoEl.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, e);
+    if (pts.size === 2 && startDist > 0) applyZoom(getStream(), videoEl, startZoom * dist() / startDist);
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) startDist = 0; };
+  videoEl.addEventListener("pointerup", up);
+  videoEl.addEventListener("pointercancel", up);
+}
 // ขอกล้องตามทิศที่ระบุ บังคับ exact ก่อน ถ้าเครื่องไม่มีค่อย fallback
 async function getCamStream(facing = camFacing) {
   const size = { width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } };
@@ -234,6 +308,7 @@ function openCamera() {
     try {
       camStream = await getCamStream();
       $("cam").srcObject = camStream;
+      resetZoom($("cam"));
       $("camModal").style.display = "flex";
       setStatus("พร้อมใช้งาน");
     } catch (e) { setStatus(await camErrorMsg(e), "bad"); resolve(null); camResolve = null; }
@@ -259,15 +334,97 @@ $("camFlip").onclick = async () => {
     try { camStream = await getCamStream(camFacing); $("cam").srcObject = camStream; } catch (_) {}
     return;
   }
-  camFacing = next; camStream = s; $("cam").srcObject = s;
+  camFacing = next; camStream = s; $("cam").srcObject = s; resetZoom($("cam"));
 };
 $("camModal").onclick = e => { if (e.target === $("camModal")) closeCamera(null); };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("camModal").style.display === "flex") closeCamera(null); });
 
-function requireReady(noteId) {
-  if (!cvReady) { if (noteId) setNote(noteId, "กำลังเตรียมระบบ… รอสักครู่แล้วลองใหม่", "warn"); return false; }
-  return true;
+// ── ถ่ายหลายใบจากกล้อง (batch capture) — ถ่าย → กรอกชื่อตอนพรีวิว → ถัดไป → เสร็จก็ตรวจทั้งชุด ──
+let capStream = null, capItems = [], capPendingURL = null, capEditIdx = -1;
+function capRenumber() { capItems.forEach((it, i) => it.name = `ถ่าย_${i + 1}`); }
+function capRenderThumbs() {
+  const box = $("capThumbs"); box.innerHTML = "";
+  capItems.forEach((it, i) => {
+    const nm = [it.realName, it.nick && `(${it.nick})`].filter(Boolean).join(" ") || it.name;
+    const d = document.createElement("div");
+    d.style.cssText = "position:relative;width:84px;cursor:pointer";
+    d.innerHTML =
+      `<img src="${it.dataURL}" alt="" style="width:84px;height:63px;object-fit:cover;border:1px solid var(--line);border-radius:6px;display:block">` +
+      `<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div>` +
+      `<button title="ลบ" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--bad);color:#fff;cursor:pointer;line-height:1;padding:0">✕</button>`;
+    d.querySelector("img").onclick = () => capEdit(i);
+    d.querySelector("div").onclick = () => capEdit(i);
+    d.querySelector("button").onclick = e => { e.stopPropagation(); capItems.splice(i, 1); capRenumber(); capRenderThumbs(); };
+    box.appendChild(d);
+  });
+  $("capCount").textContent = capItems.length + " ใบ";
+  $("capDone").disabled = !capItems.length;
 }
+function capShowLive() { $("capLive").style.display = ""; $("capPreview").style.display = "none"; capPendingURL = null; }
+function capShowPreview(url, real, nick) {
+  capPendingURL = url; $("capPrevImg").src = url;
+  $("capReal").value = real || ""; $("capNick").value = nick || "";
+  $("capLive").style.display = "none"; $("capPreview").style.display = "";
+}
+function capEdit(i) { const it = capItems[i]; if (!it) return; capEditIdx = i; capShowPreview(it.dataURL, it.realName, it.nick); }
+async function openCapModal() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setNote("gradeStatus", "เบราว์เซอร์นี้ใช้กล้องไม่ได้ — ต้องเปิดผ่าน https หรือ localhost", "bad"); return;
+  }
+  capItems = []; capEditIdx = -1; capPendingURL = null;
+  capRenderThumbs(); capShowLive();
+  setStatus("กำลังขอสิทธิ์ใช้กล้อง…", "warn");
+  try {
+    capStream = await getCamStream();
+    $("capCam").srcObject = capStream; resetZoom($("capCam"));
+    $("capModal").style.display = "flex";
+    setStatus("ถ่ายทีละใบ กรอกชื่อ แล้วกด 'เสร็จ' เพื่อตรวจทั้งชุด");
+  } catch (e) { setStatus(await camErrorMsg(e), "bad"); }
+}
+function closeCapModal() {
+  $("capModal").style.display = "none";
+  if (capStream) { capStream.getTracks().forEach(t => t.stop()); capStream = null; }
+  $("capCam").srcObject = null;
+}
+$("capShot").onclick = () => {
+  const url = cropCanvas43($("capCam")).toDataURL("image/jpeg", 0.9);
+  if (capEditIdx >= 0) capShowPreview(url, $("capReal").value, $("capNick").value);
+  else capShowPreview(url, "", "");
+};
+$("capRetake").onclick = () => { $("capLive").style.display = ""; $("capPreview").style.display = "none"; };
+$("capNext").onclick = () => {
+  if (!capPendingURL) return;
+  const real = $("capReal").value.trim(), nick = $("capNick").value.trim();
+  if (capEditIdx >= 0) { Object.assign(capItems[capEditIdx], { dataURL: capPendingURL, realName: real, nick }); capEditIdx = -1; }
+  else capItems.push({ name: "", realName: real, nick, dataURL: capPendingURL });
+  capRenumber(); capRenderThumbs(); capShowLive();
+};
+$("capFlip").onclick = async () => {
+  const next = camFacing === "environment" ? "user" : "environment";
+  if (capStream) { capStream.getTracks().forEach(t => t.stop()); capStream = null; $("capCam").srcObject = null; }
+  let s;
+  try { s = await getCamStream(next); }
+  catch (e) { setStatus(await camErrorMsg(e), "bad"); try { capStream = await getCamStream(camFacing); $("capCam").srcObject = capStream; } catch (_) {} return; }
+  camFacing = next; capStream = s; $("capCam").srcObject = s; resetZoom($("capCam"));
+};
+$("capCancel").onclick = () => closeCapModal();
+$("capDone").onclick = async () => {
+  if (!capItems.length) return;
+  const items = capItems.map(it => ({ ...it }));
+  closeCapModal();
+  if (!(await ensureModel())) return;
+  $("gradeFileInfo").textContent = `ถ่ายจากกล้อง (ชุด): ${items.length} ใบ`;
+  showBatch();
+  await withBusy("gradeProcessBtn", () => gradeBatch(items));
+};
+$("capCamBtn").onclick = () => {
+  if (!requireKey("gradeStatus")) return;
+  stopRealtime();
+  openCapModal();
+};
+$("capModal").onclick = e => { if (e.target === $("capModal")) closeCapModal(); };
+
+function requireReady() { return true; }   // ไลบรารี/โมเดลโหลดเองตอนกดประมวลผล (ensureModel)
 
 // แสดงสปินเนอร์ระหว่างประมวลผล: ปุ่มที่กดจะหมุน + สปินเนอร์เล็กข้างสถานะ + ปุ่มหยุด
 let abortCtrl = null;
@@ -294,7 +451,7 @@ $("keyFile").onchange = e => {
   selKeyFile = e.target.files[0];
   $("keyFileInfo").textContent = "เลือกไฟล์: " + selKeyFile.name;
   setNote("keyStatus", "กดปุ่ม 'ประมวลผลเฉลย' เพื่อหาคำตอบ", "warn");
-  $("keyProcessBtn").disabled = !cvReady;
+  $("keyProcessBtn").disabled = false;
   e.target.value = "";
 };
 $("keyProcessBtn").onclick = async () => {
@@ -353,7 +510,7 @@ $("gradeFile").onchange = e => {
   selGradeFile = e.target.files[0]; selBatchFiles = null; gradeMode = "single";
   $("gradeFileInfo").textContent = "เลือกไฟล์ (เดี่ยว): " + selGradeFile.name;
   setNote("gradeStatus", "กดปุ่ม 'ตรวจคำตอบ' เพื่อตรวจ", "warn");
-  $("gradeProcessBtn").disabled = !cvReady;
+  $("gradeProcessBtn").disabled = false;
   e.target.value = "";
 };
 $("batchFiles").onchange = e => {
@@ -363,7 +520,7 @@ $("batchFiles").onchange = e => {
   selBatchFiles = files; selGradeFile = null; gradeMode = "batch";
   $("gradeFileInfo").textContent = `เลือกหลายไฟล์ (ชุด): ${files.length} ไฟล์`;
   setNote("gradeStatus", "กดปุ่ม 'ตรวจคำตอบ' เพื่อตรวจทั้งชุด", "warn");
-  $("gradeProcessBtn").disabled = !cvReady;
+  $("gradeProcessBtn").disabled = false;
   e.target.value = "";
 };
 $("gradeProcessBtn").onclick = async () => {
@@ -371,7 +528,7 @@ $("gradeProcessBtn").onclick = async () => {
   stopRealtime();
   if (!(await ensureModel())) return;
   await withBusy("gradeProcessBtn", async () => {
-    if (gradeMode === "batch" && selBatchFiles) { showBatch(); await gradeBatch(selBatchFiles); }
+    if (gradeMode === "batch" && selBatchFiles) { showBatch(); await gradeBatch(selBatchFiles.map(f => ({ file: f, name: f.name, realName: "", nick: "" }))); }
     else if (selGradeFile) { showSingle(); await gradeSingle(await fileToBGR(selGradeFile)); }
   });
 };
@@ -403,7 +560,7 @@ $("rtFlipBtn").onclick = async () => {
     try { rtStream = await getCamStream(camFacing); $("rtCam").srcObject = rtStream; } catch (_) {}
     return;
   }
-  camFacing = next; rtStream = s; $("rtCam").srcObject = s;
+  camFacing = next; rtStream = s; $("rtCam").srcObject = s; resetZoom($("rtCam"));
 };
 
 // ── แตะหน้าจอเพื่อโฟกัสกล้อง (รองรับเฉพาะเครื่อง/เบราว์เซอร์ที่มี focusMode + pointsOfInterest) ──
@@ -446,6 +603,10 @@ function attachTapFocus(videoEl, getStream) {
 }
 attachTapFocus($("cam"), () => camStream);
 attachTapFocus($("rtCam"), () => rtStream);
+attachTapFocus($("capCam"), () => capStream);
+attachPinchZoom($("cam"), () => camStream);
+attachPinchZoom($("rtCam"), () => rtStream);
+attachPinchZoom($("capCam"), () => capStream);
 
 $("realtimeBtn").onclick = async () => {
   if (!requireReady("gradeStatus") || !requireKey("gradeStatus")) return;
@@ -461,6 +622,7 @@ $("realtimeBtn").onclick = async () => {
     rtStream = await getCamStream();
   } catch (e) { setNote("gradeStatus", await camErrorMsg(e), "bad"); return; }
   $("rtCam").srcObject = rtStream;
+  resetZoom($("rtCam"));
   showRealtime();
   rtActive = true;
   setNote("gradeStatus", "เรียลไทม์: เล็งกระดาษให้เห็นครบ 4 คอลัมน์", "warn");
@@ -535,15 +697,17 @@ async function gradeSingle(bgr) {
   bgr.delete();
 }
 
-async function gradeBatch(files) {
+// items: { name, realName?, nick?, file? | dataURL? }  (รับได้ทั้งเลือกไฟล์ และถ่ายจากกล้อง)
+async function gradeBatch(items) {
   const grid = $("batchGrid"); grid.innerHTML = ""; batchResults = [];
   let aborted = false;
-  for (let i = 0; i < files.length; i++) {
+  for (let i = 0; i < items.length; i++) {
     if (abortSignal() && abortSignal().aborted) { aborted = true; break; }
-    setNote("gradeStatus", `กำลังตรวจคำตอบ ${i + 1}/${files.length}…`, "warn"); setStatus(`กำลังตรวจคำตอบ ${i + 1}/${files.length}…`, "warn");
-    const r = { name: files[i].name, realName: "", nick: "", ok: false };
+    setNote("gradeStatus", `กำลังตรวจคำตอบ ${i + 1}/${items.length}…`, "warn"); setStatus(`กำลังตรวจคำตอบ ${i + 1}/${items.length}…`, "warn");
+    const it = items[i];
+    const r = { name: it.name, realName: it.realName || "", nick: it.nick || "", ok: false };
     try {
-      const bgr = await fileToBGR(files[i]);
+      const bgr = it.file ? await fileToBGR(it.file) : await dataURLToBGR(it.dataURL);
       const { results, colsMeta } = await grader.grade(bgr, level, abortSignal());
       if (!results.length) { r.errMsg = "ไม่พบคอลัมน์"; }
       else if (colsMeta.length !== EXPECTED_COLS) {
@@ -574,8 +738,8 @@ async function gradeBatch(files) {
     r.cardEl = card;
     grid.appendChild(card);
   }
-  if (aborted) { setNote("gradeStatus", `ยกเลิกแล้ว — ตรวจไป ${batchResults.length}/${files.length} ใบ`, "warn"); setStatus("ยกเลิกแล้ว", "warn"); }
-  else { setNote("gradeStatus", `เสร็จ ${files.length} ใบ`, "ok"); setStatus(`เสร็จ ${files.length} ใบ`); }
+  if (aborted) { setNote("gradeStatus", `ยกเลิกแล้ว — ตรวจไป ${batchResults.length}/${items.length} ใบ`, "warn"); setStatus("ยกเลิกแล้ว", "warn"); }
+  else { setNote("gradeStatus", `เสร็จ ${items.length} ใบ`, "ok"); setStatus(`เสร็จ ${items.length} ใบ`); }
 }
 
 function cardNameHTML(r) {
@@ -655,3 +819,30 @@ $("exportBtn").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "batch_results.csv"; a.click();
 };
+
+// ── แกลเลอรีรูปตัวอย่างให้ดาวน์โหลดไปทดสอบ ──
+const SAMPLE_IMAGES = "100-25.jpg,100-31.jpg,100-35.jpg,100-40.jpg,100-44.jpg,100-48.jpg,100-61.jpg,100-68.jpg,100-72.jpg,100-74.jpg,120-16.jpg,120-20.jpg,120-22.jpg,120-25.jpg,120-38.jpg,120-44.jpg,120-60.jpg,120-68.jpg,120-71.jpg,120-76.jpg,60-15.jpg,60-28.jpg,60-33.jpg,60-44.jpg,60-48.jpg,60-54.jpg,60-69.jpg,60-75.jpg,60-88.jpg,60-89.jpg,80-39.jpg,80-44.jpg,80-51.jpg,80-55.jpg,80-57.jpg,80-58.jpg,80-66.jpg,80-68.jpg,80-73.jpg,80-77.jpg".split(",");
+(function buildGallery() {
+  const g = $("sampleGallery"); if (!g) return;
+  SAMPLE_IMAGES.forEach(fn => {
+    const src = "samples/" + fn;
+    const cell = document.createElement("div");
+    cell.style.cssText = "border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)";
+    const a = document.createElement("a");
+    a.href = src; a.target = "_blank"; a.rel = "noopener";
+    a.style.cssText = "display:block;line-height:0";
+    const img = document.createElement("img");
+    img.src = src; img.alt = fn; img.loading = "lazy";
+    img.style.cssText = "width:100%;aspect-ratio:3/4;object-fit:cover;display:block";
+    a.appendChild(img); cell.appendChild(a);
+    const bar = document.createElement("div");
+    bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px";
+    const lbl = document.createElement("span");
+    lbl.textContent = fn; lbl.style.cssText = "font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    const dl = document.createElement("a");
+    dl.href = src; dl.download = fn; dl.title = "ดาวน์โหลด"; dl.textContent = "⬇";
+    dl.style.cssText = "text-decoration:none;color:var(--fg);font-size:15px;flex:0 0 auto";
+    bar.appendChild(lbl); bar.appendChild(dl); cell.appendChild(bar);
+    g.appendChild(cell);
+  });
+})();

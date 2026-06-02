@@ -127,6 +127,7 @@
       <input type="file" id="batchFiles" accept="image/*" multiple hidden>
       <button onclick="document.getElementById('gradeFile').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>เลือกไฟล์ (เดี่ยว)</button>
       <button id="gradeCamBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายจากกล้อง</button>
+      <button id="capCamBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายหลายใบ</button>
       <button onclick="document.getElementById('batchFiles').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>เลือกหลายไฟล์ (ชุด)</button>
       <button id="realtimeBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>เรียลไทม์ (กล้องสด)</button>
       <div style="flex-basis:100%;height:0"></div>
@@ -152,11 +153,19 @@
         <button id="rtStopBtn" style="border-color:var(--bad);color:var(--bad)">■ หยุดเรียลไทม์</button>
       </div>
       <div class="score" id="rtScore">—</div>
-      <video id="rtCam" autoplay playsinline muted style="width:100%;max-width:560px;aspect-ratio:4/3;object-fit:cover;border:1px solid var(--line);border-radius:8px;background:#000;display:block"></video>
+      <div style="width:100%;max-width:560px;aspect-ratio:4/3;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:#000;margin:0 auto">
+        <video id="rtCam" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block"></video>
+      </div>
       <canvas id="rtCanvas" class="view" style="margin-top:10px"></canvas>
     </div>
   </section>
 </div>
+
+<section style="padding:18px;border-top:1px solid var(--line);margin-top:8px">
+  <h2 style="margin:0 0 4px">ตัวอย่างกระดาษคำตอบ (ลองดาวน์โหลดไปทดสอบ)</h2>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:12px">รูปชุดทดสอบ 40 ใบ (ย่อขนาดสำหรับเดโม) — แตะรูปเพื่อเปิด หรือกด ⬇ เพื่อดาวน์โหลด แล้วนำไปลองกับปุ่ม "เลือกไฟล์/เลือกหลายไฟล์" ได้</div>
+  <div id="sampleGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px"></div>
+</section>
 
 <footer style="text-align:center;color:var(--muted);font-size:13px;padding:18px;border-top:1px solid var(--line);margin-top:8px">
   สาขาวิชาวิศวกรรมคอมพิวเตอร์ คณะวิศวกรรมศาสตร์ มหาวิทยาลัยนครพนม
@@ -183,7 +192,9 @@
 <!-- กล้อง -->
 <div id="camModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9;align-items:center;justify-content:center;padding:16px;overflow:auto">
   <div style="background:var(--panel);padding:16px;border-radius:12px;text-align:center;border:1px solid var(--line);max-width:100%;max-height:92vh;display:flex;flex-direction:column;gap:10px">
-    <video id="cam" autoplay playsinline style="max-width:100%;max-height:68vh;aspect-ratio:4/3;object-fit:cover;background:#000"></video>
+    <div style="max-width:100%;max-height:68vh;aspect-ratio:4/3;overflow:hidden;background:#000;border-radius:8px">
+      <video id="cam" autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video>
+    </div>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <button id="camShot" class="primary">จับภาพ</button>
       <button id="camFlip" title="สลับกล้องหน้า/หลัง">⟲ สลับกล้อง</button>
@@ -192,9 +203,45 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+<!-- ถ่ายหลายใบจากกล้อง -->
+<div id="capModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9;align-items:center;justify-content:center;padding:16px;overflow:auto">
+  <div style="background:var(--panel);padding:16px;border-radius:12px;text-align:center;border:1px solid var(--line);max-width:100%;max-height:94vh;display:flex;flex-direction:column;gap:10px;overflow:auto">
+    <b style="font-size:15px">ถ่ายหลายใบ — ถ่ายทีละคน แล้วกรอกชื่อ</b>
+    <div id="capLive">
+      <div style="max-width:100%;max-height:54vh;aspect-ratio:4/3;overflow:hidden;background:#000;border-radius:8px;margin:0 auto">
+        <video id="capCam" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+        <button id="capShot" class="primary">● ถ่าย</button>
+        <button id="capFlip" title="สลับกล้องหน้า/หลัง">⟲ สลับกล้อง</button>
+        <button id="capCancel">ปิด</button>
+      </div>
+    </div>
+    <div id="capPreview" style="display:none">
+      <div style="max-width:100%;max-height:46vh;aspect-ratio:4/3;overflow:hidden;background:#000;border-radius:8px;margin:0 auto">
+        <img id="capPrevImg" alt="" style="width:100%;height:100%;object-fit:cover">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+        <input id="capReal" placeholder="ชื่อจริง" style="padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)">
+        <input id="capNick" placeholder="ชื่อเล่น" style="padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+        <button id="capRetake">↺ ถ่ายใหม่</button>
+        <button id="capNext" class="primary">ถัดไป ▶</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--line);padding-top:10px">
+      <div id="capThumbs" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-height:24vh;overflow:auto"></div>
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px">
+        <span id="capCount" style="color:var(--muted)">0 ใบ</span>
+        <button id="capDone" class="primary" disabled>เสร็จ — ตรวจทั้งชุด</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- onnxruntime-web + OpenCV.js โหลดแบบ lazy ใน app.js (loadLibs) ตอนกดประมวลผลครั้งแรก -->
 <script src="pipeline.js"></script>
 <script src="app.js"></script>
-<script async src="https://docs.opencv.org/4.x/opencv.js" onload="window.__cvReady && window.__cvReady()"></script>
 </body>
 </html>
