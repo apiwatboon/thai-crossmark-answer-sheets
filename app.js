@@ -270,14 +270,18 @@ function attachPinchZoom(videoEl, getStream) {
   videoEl.style.touchAction = "none";
   videoEl.addEventListener("pointerdown", e => {
     pts.set(e.pointerId, e);
-    if (pts.size === 2) { startDist = dist(); startZoom = camZoom; }
+    if (pts.size === 2) {
+      startDist = dist(); startZoom = camZoom;
+      // จับนิ้วทั้งสองไว้ที่ video — กันเบราว์เซอร์แย่ง gesture ไปซูมทั้งหน้า (โดยเฉพาะกล้องใน modal)
+      for (const id of pts.keys()) { try { videoEl.setPointerCapture(id); } catch (_) {} }
+    }
   });
   videoEl.addEventListener("pointermove", e => {
     if (!pts.has(e.pointerId)) return;
     pts.set(e.pointerId, e);
-    if (pts.size === 2 && startDist > 0) applyZoom(getStream(), videoEl, startZoom * dist() / startDist);
+    if (pts.size === 2 && startDist > 0) { e.preventDefault(); applyZoom(getStream(), videoEl, startZoom * dist() / startDist); }
   });
-  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) startDist = 0; };
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) startDist = 0; try { videoEl.releasePointerCapture(e.pointerId); } catch (_) {} };
   videoEl.addEventListener("pointerup", up);
   videoEl.addEventListener("pointercancel", up);
 }
