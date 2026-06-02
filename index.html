@@ -162,9 +162,15 @@
 </div>
 
 <section style="padding:18px;border-top:1px solid var(--line);margin-top:8px">
-  <h2 style="margin:0 0 4px">ตัวอย่างกระดาษคำตอบ (ลองดาวน์โหลดไปทดสอบ)</h2>
-  <div style="color:var(--muted);font-size:13px;margin-bottom:12px">รูปชุดทดสอบ 40 ใบ (ย่อขนาดสำหรับเดโม) — แตะรูปเพื่อเปิด หรือกด ⬇ เพื่อดาวน์โหลด แล้วนำไปลองกับปุ่ม "เลือกไฟล์/เลือกหลายไฟล์" ได้</div>
+  <h2 style="margin:0 0 4px">ตัวอย่างกระดาษคำตอบ (สามารถดาวน์โหลดทดสอบ)</h2>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:12px">แตะรูปเพื่อเปิด หรือกด ⬇ เพื่อดาวน์โหลด แล้วนำไปลองกับปุ่ม "เลือกไฟล์/เลือกหลายไฟล์" ได้</div>
   <div id="sampleGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px"></div>
+  <div style="text-align:center;margin-top:12px">
+    <button id="sampleMoreBtn">ดูทั้งหมด 40 ใบ ▾</button>
+  </div>
+  <div id="sampleAll" style="display:none;margin-top:12px;max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:12px">
+    <div id="sampleAllGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px"></div>
+  </div>
 </section>
 
 <footer style="text-align:center;color:var(--muted);font-size:13px;padding:18px;border-top:1px solid var(--line);margin-top:8px">

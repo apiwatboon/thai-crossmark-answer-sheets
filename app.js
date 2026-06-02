@@ -822,27 +822,37 @@ $("exportBtn").onclick = () => {
 
 // ── แกลเลอรีรูปตัวอย่างให้ดาวน์โหลดไปทดสอบ ──
 const SAMPLE_IMAGES = "100-25.jpg,100-31.jpg,100-35.jpg,100-40.jpg,100-44.jpg,100-48.jpg,100-61.jpg,100-68.jpg,100-72.jpg,100-74.jpg,120-16.jpg,120-20.jpg,120-22.jpg,120-25.jpg,120-38.jpg,120-44.jpg,120-60.jpg,120-68.jpg,120-71.jpg,120-76.jpg,60-15.jpg,60-28.jpg,60-33.jpg,60-44.jpg,60-48.jpg,60-54.jpg,60-69.jpg,60-75.jpg,60-88.jpg,60-89.jpg,80-39.jpg,80-44.jpg,80-51.jpg,80-55.jpg,80-57.jpg,80-58.jpg,80-66.jpg,80-68.jpg,80-73.jpg,80-77.jpg".split(",");
+function sampleCell(fn) {
+  const src = "samples/" + fn;
+  const cell = document.createElement("div");
+  cell.style.cssText = "border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)";
+  const a = document.createElement("a");
+  a.href = src; a.target = "_blank"; a.rel = "noopener";
+  a.style.cssText = "display:block;line-height:0";
+  const img = document.createElement("img");
+  img.src = src; img.alt = fn; img.loading = "lazy";
+  img.style.cssText = "width:100%;aspect-ratio:3/4;object-fit:cover;display:block";
+  a.appendChild(img); cell.appendChild(a);
+  const bar = document.createElement("div");
+  bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px";
+  const lbl = document.createElement("span");
+  lbl.textContent = fn; lbl.style.cssText = "font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  const dl = document.createElement("a");
+  dl.href = src; dl.download = fn; dl.title = "ดาวน์โหลด"; dl.textContent = "⬇";
+  dl.style.cssText = "text-decoration:none;color:var(--fg);font-size:15px;flex:0 0 auto";
+  bar.appendChild(lbl); bar.appendChild(dl); cell.appendChild(bar);
+  return cell;
+}
 (function buildGallery() {
   const g = $("sampleGallery"); if (!g) return;
-  SAMPLE_IMAGES.forEach(fn => {
-    const src = "samples/" + fn;
-    const cell = document.createElement("div");
-    cell.style.cssText = "border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)";
-    const a = document.createElement("a");
-    a.href = src; a.target = "_blank"; a.rel = "noopener";
-    a.style.cssText = "display:block;line-height:0";
-    const img = document.createElement("img");
-    img.src = src; img.alt = fn; img.loading = "lazy";
-    img.style.cssText = "width:100%;aspect-ratio:3/4;object-fit:cover;display:block";
-    a.appendChild(img); cell.appendChild(a);
-    const bar = document.createElement("div");
-    bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px";
-    const lbl = document.createElement("span");
-    lbl.textContent = fn; lbl.style.cssText = "font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
-    const dl = document.createElement("a");
-    dl.href = src; dl.download = fn; dl.title = "ดาวน์โหลด"; dl.textContent = "⬇";
-    dl.style.cssText = "text-decoration:none;color:var(--fg);font-size:15px;flex:0 0 auto";
-    bar.appendChild(lbl); bar.appendChild(dl); cell.appendChild(bar);
-    g.appendChild(cell);
-  });
+  SAMPLE_IMAGES.slice(0, 4).forEach(fn => g.appendChild(sampleCell(fn)));
+  const btn = $("sampleMoreBtn"), box = $("sampleAll"), grid = $("sampleAllGrid");
+  if (!btn) return;
+  let built = false;
+  btn.onclick = () => {
+    const open = box.style.display === "none";
+    if (open && !built) { SAMPLE_IMAGES.forEach(fn => grid.appendChild(sampleCell(fn))); built = true; }
+    box.style.display = open ? "block" : "none";
+    btn.textContent = open ? "ซ่อน ▴" : "ดูทั้งหมด 40 ใบ ▾";
+  };
 })();
