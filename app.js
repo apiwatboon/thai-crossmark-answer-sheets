@@ -821,7 +821,7 @@ $("exportBtn").onclick = () => {
 };
 
 // ── แกลเลอรีรูปตัวอย่างให้ดาวน์โหลดไปทดสอบ ──
-const SAMPLE_IMAGES = "100-25.jpg,100-31.jpg,100-35.jpg,100-40.jpg,100-44.jpg,100-48.jpg,100-61.jpg,100-68.jpg,100-72.jpg,100-74.jpg,120-16.jpg,120-20.jpg,120-22.jpg,120-25.jpg,120-38.jpg,120-44.jpg,120-60.jpg,120-68.jpg,120-71.jpg,120-76.jpg,60-15.jpg,60-28.jpg,60-33.jpg,60-44.jpg,60-48.jpg,60-54.jpg,60-69.jpg,60-75.jpg,60-88.jpg,60-89.jpg,80-39.jpg,80-44.jpg,80-51.jpg,80-55.jpg,80-57.jpg,80-58.jpg,80-66.jpg,80-68.jpg,80-73.jpg,80-77.jpg".split(",");
+const SAMPLE_IMAGES = "60-15.jpg,60-28.jpg,60-33.jpg,60-44.jpg,60-48.jpg,60-54.jpg,60-69.jpg,60-75.jpg,60-88.jpg,60-89.jpg,80-39.jpg,80-44.jpg,80-51.jpg,80-55.jpg,80-57.jpg,80-58.jpg,80-66.jpg,80-68.jpg,80-73.jpg,80-77.jpg,100-25.jpg,100-31.jpg,100-35.jpg,100-40.jpg,100-44.jpg,100-48.jpg,100-61.jpg,100-68.jpg,100-72.jpg,100-74.jpg,120-16.jpg,120-20.jpg,120-22.jpg,120-25.jpg,120-38.jpg,120-44.jpg,120-60.jpg,120-68.jpg,120-71.jpg,120-76.jpg".split(",");
 function sampleCell(fn) {
   const src = "samples/" + fn;
   const cell = document.createElement("div");
